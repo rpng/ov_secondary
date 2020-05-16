@@ -52,15 +52,15 @@ roslaunch loop_fusion ov_secondarygraph.launch
 ## Example Results / Discussion
 
 We found that while the secondary pose graph works well in some cases, in many other cases it fails to improve performance or even hurt it.
-For example on the EurocMav datset there isn't a clear winner in terms of ATE accuracy of the OpenVINS odometry poses being fed into the loop closure module and its published states.
-On these small room datasets, many loop closure canidates are rejected, and thus there are maybe 2-4 loop closures, with V1\_02\_medium dataset having none over the whole trajectory in most cases. 
+For example on the EurocMav dataset there isn't a clear winner in terms of ATE accuracy of the OpenVINS odometry poses being fed into the loop closure module and its published states.
+On these small room datasets, many loop closure candidates are rejected, and thus there are maybe 2-4 loop closures, with V1\_02\_medium dataset having none over the whole trajectory in most cases. 
 
 ![ate example](data/ate.png)
 
 
 On the other hand, there are cases where the loop closure clearly helps.
 For example, on a long dataset such as the corridor1 from the [TUM-VI](https://vision.in.tum.de/data/datasets/visual-inertial-dataset) dataset the system running in monocular mode drifts towards the end of the dataset (blue).
-The loop closure (red) is able to correct this and ensure that the ending pose is correct relative to the start (the sensor system returns to the same location in the bottom right of this trajectory).
+The loop closure (red) is able to correct this and ensure that the ending pose is correct relative to the start (the sensor system returns to the same location in the bottom left of this trajectory).
 
 ![tum example](data/tum_example.png)
 
@@ -81,7 +81,7 @@ The loop closure (red) is able to correct this and ensure that the ending pose i
 	- Additionally, one can "skip" every few frames so the pose graph has less keyframes
 4. Preprocess information of the keyframe
 	- We will store all the global 3d position of features and their corresponding uvs
-	- Additionaly, more features are extracted to help with bag-of-word frame retrivial
+	- Additionally, more features are extracted to help with bag-of-word frame retrieval
 	- These are called `window_keypoints` and `keypoints` respectively
 	- Brief descriptors are extracted for all features
 5. Trying to detect a loop closure
@@ -111,5 +111,6 @@ The loop closure (red) is able to correct this and ensure that the ending pose i
 * Bag-of-word lookups can fail if not exactly near the same perspective
 * How best to quantify that we have a good PnP result from RANSAC?
 * Features that are used are never improved, nor optimized again, they are taken to be "true"
+* Tuning the system is difficult and can hurt performance if not properly tuned
 
 
