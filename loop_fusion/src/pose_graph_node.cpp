@@ -539,10 +539,18 @@ int main(int argc, char **argv)
 
     // Get camera information
     printf("waiting for camera info topic...\n");
-    auto msg  = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/vins_estimator/intrinsics", ros::Duration(ros::DURATION_MAX));
-    intrinsics_callback(msg);
-    printf("received camera info topic!\n");
-    printf("%s\n", m_camera.get()->parametersToString().c_str());
+    auto msg1 = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/vins_estimator/intrinsics", ros::Duration(ros::DURATION_MAX));
+    intrinsics_callback(msg1);
+    printf("received camera info message!\n");
+    std::cout << m_camera.get()->parametersToString() << std::endl;
+
+    // Get camera to imu information
+    printf("waiting for camera to imu extrinsics topic...\n");
+    auto msg2 = ros::topic::waitForMessage<nav_msgs::Odometry>("/vins_estimator/extrinsic", ros::Duration(ros::DURATION_MAX));
+    extrinsic_callback(msg2);
+    printf("received camera to imu extrinsics message!\n");
+    std::cout << qic.transpose() << std::endl;
+    std::cout << tic.transpose() << std::endl;
 
     // Setup the rest of the publishers
     ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 2000, vio_callback);
