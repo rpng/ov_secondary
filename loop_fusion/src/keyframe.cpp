@@ -98,11 +98,14 @@ void KeyFrame::computeWindowBRIEFPoint()
 void KeyFrame::computeBRIEFPoint()
 {
 	BriefExtractor extractor(BRIEF_PATTERN_FILE.c_str());
-	const int fast_th = 20; // corner detector response threshold
+	const int fast_th = 10; // corner detector response threshold
 	if(1)
-		cv::FAST(image, keypoints, fast_th, true);
-	else
 	{
+        //cv::FAST(image, keypoints, fast_th, true);
+        Grider_FAST::perform_griding(image, keypoints, 200, 1, 1, fast_th, true);
+	}
+	else
+    {
 		vector<cv::Point2f> tmp_pts;
 		cv::goodFeaturesToTrack(image, tmp_pts, 500, 0.01, 10);
 		for(int i = 0; i < (int)tmp_pts.size(); i++)
@@ -112,6 +115,16 @@ void KeyFrame::computeBRIEFPoint()
 		    keypoints.push_back(key);
 		}
 	}
+
+	// push back the uvs used in vio
+    for(int i = 0; i < (int)point_2d_uv.size(); i++)
+    {
+        cv::KeyPoint key;
+        key.pt = point_2d_uv[i];
+        keypoints.push_back(key);
+    }
+
+    // extract and save
 	extractor(image, keypoints, brief_descriptors);
 	for (int i = 0; i < (int)keypoints.size(); i++)
 	{
@@ -233,14 +246,15 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
     cv::Mat inliers;
     TicToc t_pnp_ransac;
 
+    int flags = cv::SOLVEPNP_EPNP; // SOLVEPNP_EPNP, SOLVEPNP_ITERATIVE
     if (CV_MAJOR_VERSION < 3)
-        solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, 10.0 / 460.0, 100, inliers);
+        solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 200, PNP_INFLATION / max_focallength, 100, inliers, flags);
     else
     {
         if (CV_MINOR_VERSION < 2)
-            solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, sqrt(10.0 / 460.0), 0.99, inliers);
+            solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 200, sqrt(PNP_INFLATION / max_focallength), 0.99, inliers, flags);
         else
-            solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 100, 10.0 / 460.0, 0.99, inliers);
+            solvePnPRansac(matched_3d, matched_2d_old_norm, K, D, rvec, t, true, 200, PNP_INFLATION / max_focallength, 0.99, inliers, flags);
 
     }
 
@@ -277,10 +291,25 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	vector<double> matched_id;
 	vector<uchar> status;
 
-	matched_3d = point_3d;
-	matched_2d_cur = point_2d_uv;
-	matched_2d_cur_norm = point_2d_norm;
-	matched_id = point_id;
+    // re-undistort with the latest intrinsic values
+    for (int i = 0; i < (int)point_2d_uv.size(); i++) {
+        Eigen::Vector3d tmp_p;
+        m_camera->liftProjective(Eigen::Vector2d(point_2d_uv[i].x, point_2d_uv[i].y), tmp_p);
+        point_2d_norm.push_back(cv::Point2f(tmp_p.x()/tmp_p.z(), tmp_p.y()/tmp_p.z()));
+    }
+    old_kf->keypoints_norm.clear();
+    for (int i = 0; i < (int)old_kf->keypoints.size(); i++) {
+        Eigen::Vector3d tmp_p;
+        m_camera->liftProjective(Eigen::Vector2d(old_kf->keypoints[i].pt.x, old_kf->keypoints[i].pt.y), tmp_p);
+        cv::KeyPoint tmp_norm;
+        tmp_norm.pt = cv::Point2f(tmp_p.x()/tmp_p.z(), tmp_p.y()/tmp_p.z());
+        old_kf->keypoints_norm.push_back(tmp_norm);
+    }
+
+    matched_3d = point_3d;
+    matched_2d_cur = point_2d_uv;
+    matched_id = point_id;
+    matched_2d_cur_norm = point_2d_norm;
 
 	TicToc t_match;
 	#if 0
@@ -488,7 +517,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    //printf("PNP relative\n");
 	    //cout << "pnp relative_t " << relative_t.transpose() << endl;
 	    //cout << "pnp relative_yaw " << relative_yaw << endl;
-	    if (abs(relative_yaw) < 30.0 && relative_t.norm() < 20.0)
+	    if (abs(relative_yaw) < MAX_THETA_DIFF && relative_t.norm() < MAX_POS_DIFF)
 	    {
 
 	    	has_loop = true;

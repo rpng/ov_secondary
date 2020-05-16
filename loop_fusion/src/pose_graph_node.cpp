@@ -33,7 +33,7 @@
 #include "pose_graph.h"
 #include "utility/CameraPoseVisualization.h"
 #include "parameters.h"
-#define SKIP_FIRST_CNT 10
+#define SKIP_FIRST_CNT 2
 using namespace std;
 
 queue<sensor_msgs::ImageConstPtr> image_buf;
@@ -51,6 +51,12 @@ int skip_cnt = 0;
 bool load_flag = 0;
 bool start_flag = 0;
 double SKIP_DIS = 0;
+double MIN_SCORE = 0.015;
+double PNP_INFLATION = 1.0;
+int RECALL_IGNORE_RECENT_COUNT = 50;
+double MAX_THETA_DIFF = 30.0;
+double MAX_POS_DIFF = 20.0;
+int MIN_LOOP_NUM = 25;
 
 int VISUALIZATION_SHIFT_X;
 int VISUALIZATION_SHIFT_Y;
@@ -59,6 +65,7 @@ int COL;
 int DEBUG_IMAGE;
 
 camodocal::CameraPtr m_camera;
+double max_focallength = 460.0;
 Eigen::Vector3d tic;
 Eigen::Matrix3d qic;
 ros::Publisher pub_match_img;
@@ -216,6 +223,8 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     odometry.pose.pose.orientation.y = vio_q.y();
     odometry.pose.pose.orientation.z = vio_q.z();
     odometry.pose.pose.orientation.w = vio_q.w();
+    odometry.twist = pose_msg->twist;
+    odometry.pose.covariance = pose_msg->pose.covariance;
     pub_odometry_rect.publish(odometry);
 
     Vector3d vio_t_cam;
@@ -262,6 +271,7 @@ void intrinsics_callback(const sensor_msgs::CameraInfo::ConstPtr &msg)
         parameters.push_back(msg->K.at(2));
         parameters.push_back(msg->K.at(5));
         m_camera.get()->readParameters(parameters);
+        max_focallength = std::max(msg->K.at(0), msg->K.at(4));
     } else if(msg->distortion_model == "equidistant") {
         m_camera = camodocal::CameraFactory::instance()->generateCamera(camodocal::Camera::ModelType::KANNALA_BRANDT, "cam0", imageSize);
         std::vector<double> parameters;
@@ -274,6 +284,7 @@ void intrinsics_callback(const sensor_msgs::CameraInfo::ConstPtr &msg)
         parameters.push_back(msg->K.at(2));
         parameters.push_back(msg->K.at(5));
         m_camera.get()->readParameters(parameters);
+        max_focallength = std::max(msg->K.at(0), msg->K.at(4));
     } else {
         throw std::runtime_error("Invalid distorition model, unable to parse (plumb_bob, equidistant)");
     }
@@ -361,6 +372,8 @@ void process()
                 ptr = cv_bridge::toCvCopy(image_msg, sensor_msgs::image_encodings::MONO8);
             
             cv::Mat image = ptr->image;
+            //cv::equalizeHist(image, image);
+
             // build keyframe
             Vector3d T = Vector3d(pose_msg->pose.pose.position.x,
                                   pose_msg->pose.pose.position.y,
@@ -491,6 +504,12 @@ int main(int argc, char **argv)
     fsSettings["save_image"] >> DEBUG_IMAGE;
     fsSettings["skip_dist"] >> SKIP_DIS;
     fsSettings["skip_cnt"] >> SKIP_CNT;
+    fsSettings["min_score"] >> MIN_SCORE;
+    fsSettings["pnp_inflation"] >> PNP_INFLATION;
+    fsSettings["recall_ignore_recent_ct"] >> RECALL_IGNORE_RECENT_COUNT;
+    fsSettings["max_theta_diff"] >> MAX_THETA_DIFF;
+    fsSettings["max_pos_diff"] >> MAX_POS_DIFF;
+    fsSettings["min_loop_feat_num"] >> MIN_LOOP_NUM;
 
     int LOAD_PREVIOUS_POSE_GRAPH;
     LOAD_PREVIOUS_POSE_GRAPH = fsSettings["load_previous_pose_graph"];
@@ -523,6 +542,7 @@ int main(int argc, char **argv)
     auto msg  = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/vins_estimator/intrinsics", ros::Duration(ros::DURATION_MAX));
     intrinsics_callback(msg);
     printf("received camera info topic!\n");
+    printf("%s\n", m_camera.get()->parametersToString().c_str());
 
     // Setup the rest of the publishers
     ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 2000, vio_callback);

@@ -20,11 +20,10 @@
 #include "camodocal/camera_models/PinholeCamera.h"
 #include "utility/tic_toc.h"
 #include "utility/utility.h"
+#include "utility/Grider_FAST.h"
 #include "parameters.h"
 #include "ThirdParty/DBoW/DBoW2.h"
 #include "ThirdParty/DVision/DVision.h"
-
-#define MIN_LOOP_NUM 25
 
 using namespace Eigen;
 using namespace std;

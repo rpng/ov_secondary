@@ -103,7 +103,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
         //printf(" %d detect loop with %d \n", cur_kf->index, loop_index);
         KeyFrame* old_kf = getKeyFrame(loop_index);
 
-        if (cur_kf->findConnection(old_kf))
+        if ((cur_kf->has_loop && loop_index == old_kf->index) || cur_kf->findConnection(old_kf))
         {
             if (earliest_loop_index > loop_index || earliest_loop_index == -1)
                 earliest_loop_index = loop_index;
@@ -347,7 +347,8 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
     //first query; then add this frame into database!
     QueryResults ret;
     TicToc t_query;
-    db.query(keyframe->brief_descriptors, ret, 4, frame_index - 50);
+    int max_frame_id_allowed = std::max(0, frame_index - RECALL_IGNORE_RECENT_COUNT);
+    db.query(keyframe->brief_descriptors, ret, 3, max_frame_id_allowed);
     //printf("query time: %f", t_query.toc());
     //cout << "Searching for Image " << frame_index << ". " << ret << endl;
 
@@ -375,13 +376,18 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
             cv::hconcat(loop_result, tmp_image, loop_result);
         }
     }
+
+    //for (unsigned int i = 0; i < ret.size(); i++)
+    //    cout << i << " - " <<  ret[i].Score << endl;
+
     // a good match with its nerghbour
-    if (ret.size() >= 1 &&ret[0].Score > 0.05)
-        for (unsigned int i = 1; i < ret.size(); i++)
+    //if (ret.size() >= 1 && ret[0].Score > MIN_SCORE)
+    {
+        for (unsigned int i = 0; i < ret.size(); i++)
         {
             //if (ret[i].Score > ret[0].Score * 0.3)
-            if (ret[i].Score > 0.015)
-            {          
+            if (ret[i].Score > MIN_SCORE && ret[i].Id < max_frame_id_allowed)
+            {
                 find_loop = true;
                 int tmp_index = ret[i].Id;
                 if (DEBUG_IMAGE && 0)
@@ -394,6 +400,8 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
             }
 
         }
+
+    }
 /*
     if (DEBUG_IMAGE)
     {
@@ -401,18 +409,41 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
         cv::waitKey(20);
     }
 */
-    if (find_loop && frame_index > 50)
+    //if (find_loop && frame_index > 50)
+    if (frame_index < 50)
+        return -1;
+
+    // Loop through all, and see if we have one that is a good match!
+    std::vector<int> done_ids;
+    while(done_ids.size() < ret.size())
     {
-        int min_index = -1;
+
+        // First find the oldest that we have not tried yet
+        int min_index = INFINITY;
+        bool has_min = false;
         for (unsigned int i = 0; i < ret.size(); i++)
         {
-            if (min_index == -1 || (ret[i].Id < min_index && ret[i].Score > 0.015))
+            if (ret[i].Id < min_index && ret[i].Id < max_frame_id_allowed && ret[i].Score > MIN_SCORE && std::find(done_ids.begin(),done_ids.end(),ret[i].Id)==done_ids.end())
+            {
                 min_index = ret[i].Id;
+                has_min = true;
+            }
         }
-        return min_index;
+
+        // Break out if we have not found a min
+        if(!has_min)
+            return -1;
+
+        // Then try to see if we can loop close with it
+        KeyFrame* old_kf = getKeyFrame(min_index);
+        if(keyframe->findConnection(old_kf)) return min_index;
+        else done_ids.push_back(min_index);
+
     }
-    else
-        return -1;
+
+    // failure
+    return -1;
+
 
 }
 
@@ -448,7 +479,7 @@ void PoseGraph::optimize4DoF()
         if (cur_index != -1)
         {
             //printf("optimize pose graph \n");
-            TicToc tmp_t;
+            TicToc tmp_t1;
             m_keyframelist.lock();
             KeyFrame* cur_kf = getKeyFrame(cur_index);
 
@@ -464,8 +495,9 @@ void PoseGraph::optimize4DoF()
             ceres::Solver::Options options;
             options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
             //options.minimizer_progress_to_stdout = true;
-            //options.max_solver_time_in_seconds = SOLVER_TIME * 3;
-            options.max_num_iterations = 5;
+            options.max_solver_time_in_seconds = 5;
+            options.max_num_iterations = 20;
+            options.num_threads = 1;
             ceres::Solver::Summary summary;
             ceres::LossFunction *loss_function;
             loss_function = new ceres::HuberLoss(0.1);
@@ -525,7 +557,6 @@ void PoseGraph::optimize4DoF()
                 }
 
                 //add loop edge
-                
                 if((*it)->has_loop)
                 {
                     assert((*it)->loop_index >= first_looped_index);
@@ -548,10 +579,14 @@ void PoseGraph::optimize4DoF()
                 i++;
             }
             m_keyframelist.unlock();
+            double t_create = tmp_t1.toc();
 
+
+            TicToc tmp_t2;
             ceres::Solve(options, &problem, &summary);
+            double t_opt = tmp_t2.toc();
             //std::cout << summary.BriefReport() << "\n";
-            
+
             //printf("pose optimization time: %f \n", tmp_t.toc());
             /*
             for (int j = 0 ; j < i; j++)
@@ -559,6 +594,7 @@ void PoseGraph::optimize4DoF()
                 printf("optimize i: %d p: %f, %f, %f\n", j, t_array[j][0], t_array[j][1], t_array[j][2] );
             }
             */
+            TicToc tmp_t3;
             m_keyframelist.lock();
             i = 0;
             for (it = keyframelist.begin(); it != keyframelist.end(); it++)
@@ -601,9 +637,10 @@ void PoseGraph::optimize4DoF()
             }
             m_keyframelist.unlock();
             updatePath();
+            double t_update = tmp_t3.toc();
 
             // Nice debug print
-            printf("pose optimization in %.3f seconds | %.3f dyaw, %.3f dpos\n", tmp_t.toc(), yaw_drift, t_drift.norm());
+            printf("creation %.3f ms | optimization %.3f ms | update %.3f ms | %.3f dyaw, %.3f dpos\n", t_create, t_opt, t_update, yaw_drift, t_drift.norm());
 
 
         }
@@ -647,8 +684,8 @@ void PoseGraph::optimize6DoF()
             ceres::Solver::Options options;
             options.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
             //ptions.minimizer_progress_to_stdout = true;
-            //options.max_solver_time_in_seconds = SOLVER_TIME * 3;
-            options.max_num_iterations = 5;
+            options.max_solver_time_in_seconds = 5;
+            options.max_num_iterations = 20;
             options.num_threads = 1;
             ceres::Solver::Summary summary;
             ceres::LossFunction *loss_function;

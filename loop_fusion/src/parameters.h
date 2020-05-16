@@ -22,6 +22,13 @@
 #include <cv_bridge/cv_bridge.h>
 
 extern camodocal::CameraPtr m_camera;
+extern double max_focallength;
+extern double MIN_SCORE;
+extern double PNP_INFLATION;
+extern int RECALL_IGNORE_RECENT_COUNT;
+extern double MAX_THETA_DIFF;
+extern double MAX_POS_DIFF;
+extern int MIN_LOOP_NUM;
 extern Eigen::Vector3d tic;
 extern Eigen::Matrix3d qic;
 extern ros::Publisher pub_match_img;
