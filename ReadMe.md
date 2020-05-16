@@ -12,7 +12,7 @@ Please see the below sections on the dependencies of the system along with a dis
 
 ## Codebase Disclaimer
 
-This code is provided as is as an example of how to use a secondary thread with the proposed system.
+This code is provided, as is, and is an example of how to use a secondary thread with the OpenVINS system.
 Thus, this code has been directly adapted from the [VINS-Fusion](https://github.com/HKUST-Aerial-Robotics/VINS-Fusion) repository without a thorough investigation of the underlying code.
 Therefore we don't have any guarantee of the accuracy or correctness.
 Additionally, for questions about the underlying implementation (besides discussing the changes introduced from the original codebase) we might not be able to answer in detail.
@@ -42,6 +42,7 @@ git clone https://github.com/rpng/ov_secondary.git
 cd ..
 catkin build -j4
 # run the OpenVINS system and loop node
+source devel/setup.bash
 roslaunch ov_msckf pgeneva_ros_eth.launch
 roslaunch loop_fusion ov_secondarygraph.launch
 ```
@@ -99,14 +100,7 @@ The loop closure (red) is able to correct this and ensure that the ending pose i
 	- It is important to note that the pose graph always "lags" behind the estimate
 	- The current state is rotated into the last added keyframe
 	- Then the "correction" to that original keyframe is applied to the state
-	- The corrected pose is then re-published
-
-
-
-
-
-
-
+	- The corrected pose is then re-published (see `vio_callback()` function)
 
 
 
@@ -117,3 +111,5 @@ The loop closure (red) is able to correct this and ensure that the ending pose i
 * Bag-of-word lookups can fail if not exactly near the same perspective
 * How best to quantify that we have a good PnP result from RANSAC?
 * Features that are used are never improved, nor optimized again, they are taken to be "true"
+
+
