@@ -44,7 +44,7 @@ catkin build -j4
 # run the OpenVINS system and loop node
 source devel/setup.bash
 roslaunch ov_msckf pgeneva_ros_eth.launch
-roslaunch loop_fusion ov_secondarygraph.launch
+roslaunch loop_fusion posegraph.launch
 ```
 
 
@@ -53,9 +53,10 @@ roslaunch loop_fusion ov_secondarygraph.launch
 
 We found that while the secondary pose graph works well in some cases, in many other cases it fails to improve performance or even hurt it.
 For example on the EurocMav dataset there isn't a clear winner in terms of ATE accuracy of the OpenVINS odometry poses being fed into the loop closure module and its published states.
-On these small room datasets, many loop closure candidates are rejected, and thus there are maybe 2-4 loop closures, with V1\_02\_medium dataset having none over the whole trajectory in most cases. 
+On these small room datasets, many loop closure candidates are rejected, and thus there are maybe 2-4 loop closures, with V1\_02\_medium dataset having none over the whole trajectory in most cases.
+Also to ensure there are enough points for PnP, the number of tracked features in ov\_msckf needed to be increased to around 300.
 
-![ate example](data/ate.png)
+![ate eth example](data/ate_eth.png)
 
 
 On the other hand, there are cases where the loop closure clearly helps.
@@ -65,8 +66,15 @@ The loop closure (red) is able to correct this and ensure that the ending pose i
 ![tum example](data/tum_example.png)
 
 
+Looking at some more quantitative results on the TUM-VI dataset, a few runs on the room datasets can clearly show the advantage of loop closure.
+These room datasets are limits to the same vicon room environment, and get very frequent loop closures due to this.
+From the below table, it is very clear that using the secondary loop closure thread in most cases has a clear performance gain as compared to the standard odometry.
 
-## How Loop Closure Works
+![ate tumvi example](data/ate_tumvi.png)
+
+
+
+## How VINS-Fusion Loop Closure Works
 
 
 1. We first wait to ensure we have received an initial camera intrinsic and camera to IMU extrinsic message.

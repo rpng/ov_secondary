@@ -17,6 +17,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/image_encodings.h>
 #include <sensor_msgs/CameraInfo.h>
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/Bool.h>
 #include <cv_bridge/cv_bridge.h>
@@ -71,6 +72,7 @@ Eigen::Matrix3d qic;
 ros::Publisher pub_match_img;
 ros::Publisher pub_camera_pose_visual;
 ros::Publisher pub_odometry_rect;
+ros::Publisher pub_pose_rect;
 
 std::string BRIEF_PATTERN_FILE;
 std::string POSE_GRAPH_SAVE_PATH;
@@ -83,9 +85,9 @@ ros::Publisher pub_point_cloud, pub_margin_cloud;
 
 void new_sequence()
 {
-    printf("new sequence\n");
+    printf("[POSEGRAPH]: new sequence\n");
     sequence++;
-    printf("sequence cnt %d \n", sequence);
+    printf("[POSEGRAPH]: sequence cnt %d \n", sequence);
     if (sequence > 5)
     {
         ROS_WARN("only support 5 sequences since it's boring to copy code for more sequences.");
@@ -111,7 +113,7 @@ void image_callback(const sensor_msgs::ImageConstPtr &image_msg)
     m_buf.lock();
     image_buf.push(image_msg);
     m_buf.unlock();
-    //printf(" image time %f \n", image_msg->header.stamp.toSec());
+    //printf("[POSEGRAPH]:  image time %f \n", image_msg->header.stamp.toSec());
 
     // detect unstable camera stream
     if (last_image_time == -1)
@@ -133,7 +135,7 @@ void point_callback(const sensor_msgs::PointCloudConstPtr &point_msg)
     /*
     for (unsigned int i = 0; i < point_msg->points.size(); i++)
     {
-        printf("%d, 3D point: %f, %f, %f 2D point %f, %f \n",i , point_msg->points[i].x, 
+        printf("[POSEGRAPH]: %d, 3D point: %f, %f, %f 2D point %f, %f \n",i , point_msg->points[i].x, 
                                                      point_msg->points[i].y,
                                                      point_msg->points[i].z,
                                                      point_msg->channels[i].values[0],
@@ -187,7 +189,7 @@ void pose_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     pose_buf.push(pose_msg);
     m_buf.unlock();
     /*
-    printf("pose t: %f, %f, %f   q: %f, %f, %f %f \n", pose_msg->pose.pose.position.x,
+    printf("[POSEGRAPH]: pose t: %f, %f, %f   q: %f, %f, %f %f \n", pose_msg->pose.pose.position.x,
                                                        pose_msg->pose.pose.position.y,
                                                        pose_msg->pose.pose.position.z,
                                                        pose_msg->pose.pose.orientation.w,
@@ -231,6 +233,48 @@ void vio_callback(const nav_msgs::Odometry::ConstPtr &pose_msg)
     Quaterniond vio_q_cam;
     vio_t_cam = vio_t + vio_q * tic;
     vio_q_cam = vio_q * qic;        
+
+    cameraposevisual.reset();
+    cameraposevisual.add_pose(vio_t_cam, vio_q_cam);
+    cameraposevisual.publish_by(pub_camera_pose_visual, pose_msg->header);
+
+
+}
+
+
+void vio_callback_pose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr &pose_msg)
+{
+    //ROS_INFO("vio_callback!");
+    Vector3d vio_t(pose_msg->pose.pose.position.x, pose_msg->pose.pose.position.y, pose_msg->pose.pose.position.z);
+    Quaterniond vio_q;
+    vio_q.w() = pose_msg->pose.pose.orientation.w;
+    vio_q.x() = pose_msg->pose.pose.orientation.x;
+    vio_q.y() = pose_msg->pose.pose.orientation.y;
+    vio_q.z() = pose_msg->pose.pose.orientation.z;
+
+    vio_t = posegraph.w_r_vio * vio_t + posegraph.w_t_vio;
+    vio_q = posegraph.w_r_vio *  vio_q;
+
+    vio_t = posegraph.r_drift * vio_t + posegraph.t_drift;
+    vio_q = posegraph.r_drift * vio_q;
+
+    geometry_msgs::PoseWithCovarianceStamped odometry;
+    odometry.header = pose_msg->header;
+    odometry.header.frame_id = "global";
+    odometry.pose.pose.position.x = vio_t.x();
+    odometry.pose.pose.position.y = vio_t.y();
+    odometry.pose.pose.position.z = vio_t.z();
+    odometry.pose.pose.orientation.x = vio_q.x();
+    odometry.pose.pose.orientation.y = vio_q.y();
+    odometry.pose.pose.orientation.z = vio_q.z();
+    odometry.pose.pose.orientation.w = vio_q.w();
+    odometry.pose.covariance = pose_msg->pose.covariance;
+    pub_pose_rect.publish(odometry);
+
+    Vector3d vio_t_cam;
+    Quaterniond vio_q_cam;
+    vio_t_cam = vio_t + vio_q * tic;
+    vio_q_cam = vio_q * qic;
 
     cameraposevisual.reset();
     cameraposevisual.add_pose(vio_t_cam, vio_q_cam);
@@ -306,12 +350,12 @@ void process()
             if (image_buf.front()->header.stamp.toSec() > pose_buf.front()->header.stamp.toSec())
             {
                 pose_buf.pop();
-                printf("throw pose at beginning\n");
+                printf("[POSEGRAPH]: throw pose at beginning\n");
             }
             else if (image_buf.front()->header.stamp.toSec() > point_buf.front()->header.stamp.toSec())
             {
                 point_buf.pop();
-                printf("throw point at beginning\n");
+                printf("[POSEGRAPH]: throw point at beginning\n");
             }
             else if (image_buf.back()->header.stamp.toSec() >= pose_buf.front()->header.stamp.toSec() 
                 && point_buf.back()->header.stamp.toSec() >= pose_buf.front()->header.stamp.toSec())
@@ -335,9 +379,9 @@ void process()
 
         if (pose_msg != NULL)
         {
-            //printf(" pose time %f \n", pose_msg->header.stamp.toSec());
-            //printf(" point time %f \n", point_msg->header.stamp.toSec());
-            //printf(" image time %f \n", image_msg->header.stamp.toSec());
+            //printf("[POSEGRAPH]:  pose time %f \n", pose_msg->header.stamp.toSec());
+            //printf("[POSEGRAPH]:  point time %f \n", point_msg->header.stamp.toSec());
+            //printf("[POSEGRAPH]:  image time %f \n", image_msg->header.stamp.toSec());
             // skip fisrt few
             if (skip_first_cnt < SKIP_FIRST_CNT)
             {
@@ -408,7 +452,7 @@ void process()
                     point_2d_uv.push_back(p_2d_uv);
                     point_id.push_back(p_id);
 
-                    //printf("u %f, v %f \n", p_2d_uv.x, p_2d_uv.y);
+                    //printf("[POSEGRAPH]: u %f, v %f \n", p_2d_uv.x, p_2d_uv.y);
                 }
 
                 KeyFrame* keyframe = new KeyFrame(pose_msg->header.stamp.toSec(), frame_index, T, R, image,
@@ -436,8 +480,8 @@ void command()
             m_process.lock();
             posegraph.savePoseGraph();
             m_process.unlock();
-            printf("save pose graph finish\nyou can set 'load_previous_pose_graph' to 1 in the config file to reuse it next time\n");
-            printf("program shutting down...\n");
+            printf("[POSEGRAPH]: save pose graph finish\nyou can set 'load_previous_pose_graph' to 1 in the config file to reuse it next time\n");
+            printf("[POSEGRAPH]: program shutting down...\n");
             ros::shutdown();
         }
         if (c == 'n')
@@ -461,14 +505,14 @@ int main(int argc, char **argv)
 
     if(argc != 2)
     {
-        printf("please intput: rosrun loop_fusion loop_fusion_node [config file] \n"
+        printf("[POSEGRAPH]: please intput: rosrun loop_fusion loop_fusion_node [config file] \n"
                "for example: rosrun loop_fusion loop_fusion_node "
                "/home/tony-ws1/catkin_ws/src/VINS-Fusion/config/euroc/euroc_stereo_imu_config.yaml \n");
         return 0;
     }
     
     string config_file = argv[1];
-    printf("config_file: %s\n", argv[1]);
+    printf("[POSEGRAPH]: config_file: %s\n", argv[1]);
 
     cv::FileStorage fsSettings(config_file, cv::FileStorage::READ);
     if(!fsSettings.isOpened())
@@ -495,7 +539,7 @@ int main(int argc, char **argv)
     //std::string cam0Calib;
     //fsSettings["cam0_calib"] >> cam0Calib;
     //std::string cam0Path = configPath + "/" + cam0Calib;
-    //printf("cam calib path: %s\n", cam0Path.c_str());
+    //printf("[POSEGRAPH]: cam calib path: %s\n", cam0Path.c_str());
     //m_camera = camodocal::CameraFactory::instance()->generateCameraFromYamlFile(cam0Path.c_str());
 
 
@@ -523,37 +567,38 @@ int main(int argc, char **argv)
 
     if (LOAD_PREVIOUS_POSE_GRAPH)
     {
-        printf("load pose graph\n");
+        printf("[POSEGRAPH]: load pose graph\n");
         m_process.lock();
         posegraph.loadPoseGraph();
         m_process.unlock();
-        printf("load pose graph finish\n");
+        printf("[POSEGRAPH]: load pose graph finish\n");
         load_flag = 1;
     }
     else
     {
-        printf("no previous pose graph\n");
+        printf("[POSEGRAPH]: no previous pose graph\n");
         load_flag = 1;
     }
 
 
     // Get camera information
-    printf("waiting for camera info topic...\n");
+    printf("[POSEGRAPH]: waiting for camera info topic...\n");
     auto msg1 = ros::topic::waitForMessage<sensor_msgs::CameraInfo>("/vins_estimator/intrinsics", ros::Duration(ros::DURATION_MAX));
     intrinsics_callback(msg1);
-    printf("received camera info message!\n");
+    printf("[POSEGRAPH]: received camera info message!\n");
     std::cout << m_camera.get()->parametersToString() << std::endl;
 
     // Get camera to imu information
-    printf("waiting for camera to imu extrinsics topic...\n");
+    printf("[POSEGRAPH]: waiting for camera to imu extrinsics topic...\n");
     auto msg2 = ros::topic::waitForMessage<nav_msgs::Odometry>("/vins_estimator/extrinsic", ros::Duration(ros::DURATION_MAX));
     extrinsic_callback(msg2);
-    printf("received camera to imu extrinsics message!\n");
+    printf("[POSEGRAPH]: received camera to imu extrinsics message!\n");
     std::cout << qic.transpose() << std::endl;
     std::cout << tic.transpose() << std::endl;
 
     // Setup the rest of the publishers
-    ros::Subscriber sub_vio = n.subscribe("/vins_estimator/odometry", 2000, vio_callback);
+    ros::Subscriber sub_vio1 = n.subscribe("/vins_estimator/odometry", 2000, vio_callback);
+    ros::Subscriber sub_vio2 = n.subscribe("/vins_estimator/pose", 2000, vio_callback_pose);
     ros::Subscriber sub_image = n.subscribe("/cam0/image_raw", 2000, image_callback);
     ros::Subscriber sub_pose = n.subscribe("/vins_estimator/keyframe_pose", 2000, pose_callback);
     ros::Subscriber sub_extrinsic = n.subscribe("/vins_estimator/extrinsic", 2000, extrinsic_callback);
@@ -566,6 +611,7 @@ int main(int argc, char **argv)
     pub_point_cloud = n.advertise<sensor_msgs::PointCloud>("point_cloud_loop_rect", 1000);
     pub_margin_cloud = n.advertise<sensor_msgs::PointCloud>("margin_cloud_loop_rect", 1000);
     pub_odometry_rect = n.advertise<nav_msgs::Odometry>("odometry_rect", 1000);
+    pub_pose_rect = n.advertise<geometry_msgs::PoseWithCovarianceStamped>("pose_rect", 1000);
 
     std::thread measurement_process;
     std::thread keyboard_command_process;

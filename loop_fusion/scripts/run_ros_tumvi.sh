@@ -17,12 +17,12 @@ modes=(
 
 # dataset locations
 bagnames=(
-    "V1_01_easy"
-    "V1_02_medium"
-    "V1_03_difficult"
-    "V2_01_easy"
-    "V2_02_medium"
-    "V2_03_difficult"
+    "dataset-room1_512_16"
+    "dataset-room2_512_16"
+    "dataset-room3_512_16"
+    "dataset-room4_512_16"
+    "dataset-room5_512_16"
+    "dataset-room6_512_16"
 )
 
 
@@ -55,7 +55,7 @@ then
 fi
 
 # run our ROS launch file (note we send console output to terminator)
-roslaunch loop_fusion record_eth.launch max_cameras:="$temp1" dataset:="${bagnames[i]}" run_number:="$j" mode_type:="${modes[h]}" &> /dev/null
+roslaunch loop_fusion record_tumvi.launch max_cameras:="$temp1" dataset:="${bagnames[i]}" run_number:="$j" mode_type:="${modes[h]}" &> /dev/null
 
 # print out the time elapsed
 end_time="$(date -u +%s)"

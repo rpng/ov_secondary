@@ -48,12 +48,12 @@ void PoseGraph::setIMUFlag(bool _use_imu)
     use_imu = _use_imu;
     if(use_imu)
     {
-        printf("VIO input, perfrom 4 DoF (x, y, z, yaw) pose graph optimization\n");
+        printf("[POSEGRAPH]: VIO input, perfrom 4 DoF (x, y, z, yaw) pose graph optimization\n");
         t_optimization = std::thread(&PoseGraph::optimize4DoF, this);
     }
     else
     {
-        printf("VO input, perfrom 6 DoF pose graph optimization\n");
+        printf("[POSEGRAPH]: VO input, perfrom 6 DoF pose graph optimization\n");
         t_optimization = std::thread(&PoseGraph::optimize6DoF, this);
     }
 
@@ -100,7 +100,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     }
 	if (loop_index != -1)
 	{
-        //printf(" %d detect loop with %d \n", cur_kf->index, loop_index);
+        //printf("[POSEGRAPH]:  %d detect loop with %d \n", cur_kf->index, loop_index);
         KeyFrame* old_kf = getKeyFrame(loop_index);
 
         if ((cur_kf->has_loop && loop_index == old_kf->index) || cur_kf->findConnection(old_kf))
@@ -218,7 +218,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     {
         if (cur_kf->has_loop)
         {
-            //printf("has loop \n");
+            //printf("[POSEGRAPH]: has loop \n");
             KeyFrame* connected_KF = getKeyFrame(cur_kf->loop_index);
             Vector3d connected_P,P0;
             Matrix3d connected_R,R0;
@@ -227,7 +227,7 @@ void PoseGraph::addKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
             cur_kf->getPose(P0, R0);
             if(cur_kf->sequence > 0)
             {
-                //printf("add loop into visual \n");
+                //printf("[POSEGRAPH]: add loop into visual \n");
                 posegraph_visualization->add_loopedge(P0, connected_P + Vector3d(VISUALIZATION_SHIFT_X, VISUALIZATION_SHIFT_Y, 0));
             }
             
@@ -254,7 +254,7 @@ void PoseGraph::loadKeyFrame(KeyFrame* cur_kf, bool flag_detect_loop)
     }
     if (loop_index != -1)
     {
-        printf(" %d detect loop with %d \n", cur_kf->index, loop_index);
+        printf("[POSEGRAPH]:  %d detect loop with %d \n", cur_kf->index, loop_index);
         KeyFrame* old_kf = getKeyFrame(loop_index);
         if (cur_kf->findConnection(old_kf))
         {
@@ -349,12 +349,12 @@ int PoseGraph::detectLoop(KeyFrame* keyframe, int frame_index)
     TicToc t_query;
     int max_frame_id_allowed = std::max(0, frame_index - RECALL_IGNORE_RECENT_COUNT);
     db.query(keyframe->brief_descriptors, ret, 3, max_frame_id_allowed);
-    //printf("query time: %f", t_query.toc());
+    //printf("[POSEGRAPH]: query time: %f", t_query.toc());
     //cout << "Searching for Image " << frame_index << ". " << ret << endl;
 
     TicToc t_add;
     db.add(keyframe->brief_descriptors);
-    //printf("add feature time: %f", t_add.toc());
+    //printf("[POSEGRAPH]: add feature time: %f", t_add.toc());
     // ret[0] is the nearest neighbour's score. threshold change with neighour score
     bool find_loop = false;
     cv::Mat loop_result;
@@ -478,7 +478,7 @@ void PoseGraph::optimize4DoF()
         m_optimize_buf.unlock();
         if (cur_index != -1)
         {
-            //printf("optimize pose graph \n");
+            //printf("[POSEGRAPH]: optimize pose graph \n");
             TicToc tmp_t1;
             m_keyframelist.lock();
             KeyFrame* cur_kf = getKeyFrame(cur_index);
@@ -587,11 +587,11 @@ void PoseGraph::optimize4DoF()
             double t_opt = tmp_t2.toc();
             //std::cout << summary.BriefReport() << "\n";
 
-            //printf("pose optimization time: %f \n", tmp_t.toc());
+            //printf("[POSEGRAPH]: pose optimization time: %f \n", tmp_t.toc());
             /*
             for (int j = 0 ; j < i; j++)
             {
-                printf("optimize i: %d p: %f, %f, %f\n", j, t_array[j][0], t_array[j][1], t_array[j][2] );
+                printf("[POSEGRAPH]: optimize i: %d p: %f, %f, %f\n", j, t_array[j][0], t_array[j][1], t_array[j][2] );
             }
             */
             TicToc tmp_t3;
@@ -640,7 +640,7 @@ void PoseGraph::optimize4DoF()
             double t_update = tmp_t3.toc();
 
             // Nice debug print
-            printf("creation %.3f ms | optimization %.3f ms | update %.3f ms | %.3f dyaw, %.3f dpos\n", t_create, t_opt, t_update, yaw_drift, t_drift.norm());
+            printf("[POSEGRAPH]: creation %.3f ms | optimization %.3f ms | update %.3f ms | %.3f dyaw, %.3f dpos\n", t_create, t_opt, t_update, yaw_drift, t_drift.norm());
 
 
         }
@@ -668,7 +668,7 @@ void PoseGraph::optimize6DoF()
         m_optimize_buf.unlock();
         if (cur_index != -1)
         {
-            //printf("optimize pose graph \n");
+            //printf("[POSEGRAPH]: optimize pose graph \n");
             TicToc tmp_t;
             m_keyframelist.lock();
             KeyFrame* cur_kf = getKeyFrame(cur_index);
@@ -767,11 +767,11 @@ void PoseGraph::optimize6DoF()
             ceres::Solve(options, &problem, &summary);
             //std::cout << summary.BriefReport() << "\n";
             
-            //printf("pose optimization time: %f \n", tmp_t.toc());
+            //printf("[POSEGRAPH]: pose optimization time: %f \n", tmp_t.toc());
             /*
             for (int j = 0 ; j < i; j++)
             {
-                printf("optimize i: %d p: %f, %f, %f\n", j, t_array[j][0], t_array[j][1], t_array[j][2] );
+                printf("[POSEGRAPH]: optimize i: %d p: %f, %f, %f\n", j, t_array[j][0], t_array[j][1], t_array[j][2] );
             }
             */
             m_keyframelist.lock();
@@ -815,7 +815,7 @@ void PoseGraph::optimize6DoF()
             updatePath();
 
             // Nice debug print
-            printf("pose optimization in %.3f seconds | %.3f dori, %.3f dpos\n", tmp_t.toc(), Utility::R2ypr(r_drift).norm(), t_drift.norm());
+            printf("[POSEGRAPH]: pose optimization in %.3f seconds | %.3f dori, %.3f dpos\n", tmp_t.toc(), Utility::R2ypr(r_drift).norm(), t_drift.norm());
 
         }
 
@@ -849,7 +849,7 @@ void PoseGraph::updatePath()
         (*it)->getPose(P, R);
         Quaterniond Q;
         Q = R;
-//        printf("path p: %f, %f, %f\n",  P.x(),  P.z(),  P.y() );
+//        printf("[POSEGRAPH]: path p: %f, %f, %f\n",  P.x(),  P.z(),  P.y() );
 
         geometry_msgs::PoseStamped pose_stamped;
         pose_stamped.header.stamp = ros::Time((*it)->time_stamp);
@@ -946,8 +946,8 @@ void PoseGraph::savePoseGraph()
     m_keyframelist.lock();
     TicToc tmp_t;
     FILE *pFile;
-    printf("pose graph path: %s\n",POSE_GRAPH_SAVE_PATH.c_str());
-    printf("pose graph saving... \n");
+    printf("[POSEGRAPH]: pose graph path: %s\n",POSE_GRAPH_SAVE_PATH.c_str());
+    printf("[POSEGRAPH]: pose graph saving... \n");
     string file_path = POSE_GRAPH_SAVE_PATH + "pose_graph.txt";
     pFile = fopen (file_path.c_str(),"w");
     //fprintf(pFile, "index time_stamp Tx Ty Tz Qw Qx Qy Qz loop_index loop_info\n");
@@ -993,7 +993,7 @@ void PoseGraph::savePoseGraph()
     }
     fclose(pFile);
 
-    printf("save pose graph time: %f s\n", tmp_t.toc() / 1000);
+    printf("[POSEGRAPH]: save pose graph time: %f s\n", tmp_t.toc() / 1000);
     m_keyframelist.unlock();
 }
 void PoseGraph::loadPoseGraph()
@@ -1001,12 +1001,12 @@ void PoseGraph::loadPoseGraph()
     TicToc tmp_t;
     FILE * pFile;
     string file_path = POSE_GRAPH_SAVE_PATH + "pose_graph.txt";
-    printf("lode pose graph from: %s \n", file_path.c_str());
-    printf("pose graph loading...\n");
+    printf("[POSEGRAPH]: lode pose graph from: %s \n", file_path.c_str());
+    printf("[POSEGRAPH]: pose graph loading...\n");
     pFile = fopen (file_path.c_str(),"r");
     if (pFile == NULL)
     {
-        printf("lode previous pose graph error: wrong previous pose graph path or no previous pose graph \n the system will start with new pose graph \n");
+        printf("[POSEGRAPH]: lode previous pose graph error: wrong previous pose graph path or no previous pose graph \n the system will start with new pose graph \n");
         return;
     }
     int index;
@@ -1032,7 +1032,7 @@ void PoseGraph::loadPoseGraph()
                                     &keypoints_num) != EOF) 
     {
         /*
-        printf("I read: %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %d %lf %lf %lf %lf %lf %lf %lf %lf %d\n", index, time_stamp, 
+        printf("[POSEGRAPH]: I read: %d %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %lf %d %lf %lf %lf %lf %lf %lf %lf %lf %d\n", index, time_stamp, 
                                     VIO_Tx, VIO_Ty, VIO_Tz, 
                                     PG_Tx, PG_Ty, PG_Tz, 
                                     VIO_Qw, VIO_Qx, VIO_Qy, VIO_Qz, 
@@ -1092,7 +1092,7 @@ void PoseGraph::loadPoseGraph()
             cv::KeyPoint tmp_keypoint_norm;
             double p_x, p_y, p_x_norm, p_y_norm;
             if(!fscanf(keypoints_file,"%lf %lf %lf %lf", &p_x, &p_y, &p_x_norm, &p_y_norm))
-                printf(" fail to load pose graph \n");
+                printf("[POSEGRAPH]:  fail to load pose graph \n");
             tmp_keypoint.pt.x = p_x;
             tmp_keypoint.pt.y = p_y;
             tmp_keypoint_norm.pt.x = p_x_norm;
@@ -1112,7 +1112,7 @@ void PoseGraph::loadPoseGraph()
         cnt++;
     }
     fclose (pFile);
-    printf("load pose graph time: %f s\n", tmp_t.toc()/1000);
+    printf("[POSEGRAPH]: load pose graph time: %f s\n", tmp_t.toc()/1000);
     base_sequence = 0;
 }
 

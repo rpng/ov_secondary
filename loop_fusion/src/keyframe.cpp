@@ -162,7 +162,7 @@ bool KeyFrame::searchInAera(const BRIEF::bitset window_descriptor,
             bestIndex = i;
         }
     }
-    //printf("best dist %d", bestDist);
+    //printf("[POSEGRAPH]: best dist %d", bestDist);
     if (bestIndex != -1 && bestDist < 80)
     {
       best_match = keypoints_old[bestIndex].pt;
@@ -227,8 +227,8 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
                          Eigen::Vector3d &PnP_T_old, Eigen::Matrix3d &PnP_R_old)
 {
 	//for (int i = 0; i < matched_3d.size(); i++)
-	//	printf("3d x: %f, y: %f, z: %f\n",matched_3d[i].x, matched_3d[i].y, matched_3d[i].z );
-	//printf("match size %d \n", matched_3d.size());
+	//	printf("[POSEGRAPH]: 3d x: %f, y: %f, z: %f\n",matched_3d[i].x, matched_3d[i].y, matched_3d[i].z );
+	//printf("[POSEGRAPH]: match size %d \n", matched_3d.size());
     cv::Mat r, rvec, t, D, tmp_r;
     cv::Mat K = (cv::Mat_<double>(3, 3) << 1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0);
     Matrix3d R_inital;
@@ -284,7 +284,7 @@ void KeyFrame::PnPRANSAC(const vector<cv::Point2f> &matched_2d_old_norm,
 bool KeyFrame::findConnection(KeyFrame* old_kf)
 {
 	TicToc tmp_t;
-	//printf("find Connection\n");
+	//printf("[POSEGRAPH]: find Connection\n");
 	vector<cv::Point2f> matched_2d_cur, matched_2d_old;
 	vector<cv::Point2f> matched_2d_cur_norm, matched_2d_old_norm;
 	vector<cv::Point3f> matched_3d;
@@ -337,7 +337,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	        cv::imwrite( path.str().c_str(), loop_match_img);
 	    }
 	#endif
-	//printf("search by des\n");
+	//printf("[POSEGRAPH]: search by des\n");
 	searchByBRIEFDes(matched_2d_old, matched_2d_old_norm, status, old_kf->brief_descriptors, old_kf->keypoints, old_kf->keypoints_norm);
 	reduceVector(matched_2d_cur, status);
 	reduceVector(matched_2d_old, status);
@@ -345,7 +345,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	reduceVector(matched_2d_old_norm, status);
 	reduceVector(matched_3d, status);
 	reduceVector(matched_id, status);
-	//printf("search by des finish\n");
+	//printf("[POSEGRAPH]: search by des finish\n");
 
 	#if 0 
 		if (DEBUG_IMAGE)
@@ -514,7 +514,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	    relative_t = PnP_R_old.transpose() * (origin_vio_T - PnP_T_old);
 	    relative_q = PnP_R_old.transpose() * origin_vio_R;
 	    relative_yaw = Utility::normalizeAngle(Utility::R2ypr(origin_vio_R).x() - Utility::R2ypr(PnP_R_old).x());
-	    //printf("PNP relative\n");
+	    //printf("[POSEGRAPH]: PNP relative\n");
 	    //cout << "pnp relative_t " << relative_t.transpose() << endl;
 	    //cout << "pnp relative_yaw " << relative_yaw << endl;
 	    if (abs(relative_yaw) < MAX_THETA_DIFF && relative_t.norm() < MAX_POS_DIFF)
@@ -530,7 +530,7 @@ bool KeyFrame::findConnection(KeyFrame* old_kf)
 	        return true;
 	    }
 	}
-	//printf("loop final use num %d %lf--------------- \n", (int)matched_2d_cur.size(), t_match.toc());
+	//printf("[POSEGRAPH]: loop final use num %d %lf--------------- \n", (int)matched_2d_cur.size(), t_match.toc());
 	return false;
 }
 
@@ -587,7 +587,7 @@ void KeyFrame::updateLoop(Eigen::Matrix<double, 8, 1 > &_loop_info)
 {
 	if (abs(_loop_info(7)) < 30.0 && Vector3d(_loop_info(0), _loop_info(1), _loop_info(2)).norm() < 20.0)
 	{
-		//printf("update loop info\n");
+		//printf("[POSEGRAPH]: update loop info\n");
 		loop_info = _loop_info;
 	}
 }
